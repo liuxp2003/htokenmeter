@@ -1,0 +1,68 @@
+#!/bin/sh /etc/rc.common
+# SPDX-License-Identifier: MIT
+
+START=99
+STOP=15
+USE_PROCD=1
+NAME=htokenmeter
+PROG=/usr/bin/htokenmeter
+
+CONFDIR=/etc/htokenmeter
+
+start_instance() {
+    local cfg="$1"
+
+    local enabled
+    config_get_bool enabled "$cfg" enabled 0
+    [ "$enabled" -eq 0 ] && return 0
+
+    # Wait for network-ish uptime on fresh boot (upstream APIs unreachable earlier).
+    local delay
+    config_get delay "$cfg" delay 0
+    if [ "$delay" -gt 0 ]; then
+        local uptime
+        uptime=$(awk -F. '{print $1}' /proc/uptime)
+        [ "$uptime" -lt 120 ] && sleep "$delay"
+    fi
+
+    local port db log_dir log_retention retry
+    config_get port "$cfg" port 8317
+    config_get db "$cfg" db_path ''
+    config_get log_dir "$cfg" log_dir ''
+    config_get log_retention "$cfg" log_retention 30
+    config_get retry "$cfg" retry_times 3
+
+    [ -d "$CONFDIR" ] || {
+        mkdir -p "$CONFDIR"
+        chown htokenmeter:htokenmeter "$CONFDIR"
+        chmod 750 "$CONFDIR"
+    }
+
+    procd_open_instance
+    procd_set_param command "$PROG" \
+        --port "$port" \
+        --config-dir "$CONFDIR" \
+        --log-dir "$log_dir"
+    [ -n "$db" ] && procd_append_param command --db "$db"
+    procd_set_param env LOG_RETENTION_DAYS="$log_retention" RETRY_TIMES="$retry"
+    procd_set_param user htokenmeter
+    procd_set_param respawn 3600 5 0
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param limits core="0 0"
+    procd_close_instance
+}
+
+start_service() {
+    config_load "$NAME"
+    config_foreach start_instance "$NAME"
+}
+
+service_triggers() {
+    procd_add_reload_trigger "$NAME"
+}
+
+reload_service() {
+    stop
+    start
+}
