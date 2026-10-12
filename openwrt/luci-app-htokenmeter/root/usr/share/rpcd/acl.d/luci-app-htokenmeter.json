@@ -1,0 +1,17 @@
+{
+    "luci-app-htokenmeter": {
+        "description": "Grant access to htokenmeter status and configuration",
+        "read": {
+            "ubus": {
+                "luci": [ "getInitList", "getInitStatus" ]
+            },
+            "uci": [ "htokenmeter" ]
+        },
+        "write": {
+            "ubus": {
+                "luci": [ "setInitAction" ]
+            },
+            "uci": [ "htokenmeter" ]
+        }
+    }
+}

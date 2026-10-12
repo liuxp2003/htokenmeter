@@ -1,0 +1,71 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "htokenmeter - AI Gateway"
+msgstr "htokenmeter - AI 网关"
+
+msgid "Unified LAN entry for OpenAI/Claude/Gemini model services with usage and cost metering. Manage channels, tokens and prices inside the gateway console."
+msgstr "将 OpenAI/Claude/Gemini 等模型服务统一到内网入口，提供用量与成本计量。渠道、令牌与价格在网关控制台内管理。"
+
+msgid "Enabled"
+msgstr "启用"
+
+msgid "Console port"
+msgstr "控制台端口"
+
+msgid "HTTP port of the gateway console and API."
+msgstr "网关控制台与 API 的 HTTP 端口。"
+
+msgid "SQLite path"
+msgstr "SQLite 路径"
+
+msgid "Empty = /etc/htokenmeter/htokenmeter.db. Tip: point to extroot to spare router flash."
+msgstr "留空 = /etc/htokenmeter/htokenmeter.db。提示：指向 extroot 可减少路由器闪存损耗。"
+
+msgid "Log directory"
+msgstr "日志目录"
+
+msgid "Empty = stderr (visible via logread). Set to write logs to a file instead."
+msgstr "留空 = stderr（可用 logread 查看）。设置后写文件。"
+
+msgid "Log retention (days)"
+msgstr "日志保留（天）"
+
+msgid "Usage logs older than this are removed daily to protect flash. 0 = keep forever."
+msgstr "更早的用量日志每天清理一次以保护闪存。0 = 永久保留。"
+
+msgid "Relay retries"
+msgstr "中继重试次数"
+
+msgid "Retries on 429/5xx before giving up (a different channel tier is tried)."
+msgstr "遇到 429/5xx 时重试的次数（每次换不同优先级的渠道）。"
+
+msgid "Boot delay (seconds)"
+msgstr "开机延迟（秒）"
+
+msgid "Wait before start when uptime is under 2 minutes."
+msgstr "开机 2 分钟内启动时先等待的秒数。"
+
+msgid "Console"
+msgstr "控制台"
+
+msgid "Base Setting"
+msgstr "基本设置"
+
+msgid "htokenmeter service is not running."
+msgstr "htokenmeter 服务未运行。"
+
+msgid "Enable it on the Base Setting page, then return here."
+msgstr "请先在基本设置页启用，再回到本页。"
+
+msgid "LuCI is served over HTTPS and the gateway console over HTTP; browsers block embedding HTTP frames into HTTPS pages."
+msgstr "LuCI 使用 HTTPS 而网关控制台为 HTTP，浏览器禁止在 HTTPS 页面内嵌 HTTP 帧。"
+
+msgid "Open htokenmeter console in a new tab"
+msgstr "在新标签页打开 htokenmeter 控制台"
+
+msgid "Open in new tab"
+msgstr "新标签页打开"
+
+msgid "Gateway console (default admin password is printed in the system log on first boot: look for \"first boot\" in logread)."
+msgstr "网关控制台（首次启动的管理员密码打印在系统日志：在 logread 中找 \"first boot\" 行）。"

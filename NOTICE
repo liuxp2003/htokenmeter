@@ -1,0 +1,23 @@
+# NOTICE
+
+htokenmeter is an original implementation written for this project. It is not
+a fork and contains no code from either project below; the design borrows
+architectural patterns, which are ideas, not copyrightable expression.
+
+Architecture references:
+
+- one-api (https://github.com/songquanpeng/one-api), MIT License.
+  Patterns referenced: the channel/ability/token data model, the
+  pre-consume/settle relay flow, channel error classification for
+  auto-disable, and the embedded web console approach.
+
+- new-api (https://github.com/QuantumNous/new-api), AGPLv3.
+  NO code was copied (its license would require this project to be AGPLv3).
+  Patterns referenced only at the architectural level: multi-protocol
+  downstream endpoints with auth header normalization, the multi-format
+  adaptor interface, weighted channel selection, and billing safety
+  invariants (centralized quota math, bounded billing multipliers).
+
+- luci-app-ddns-go (https://github.com/sirpdboy/luci-app-ddns-go) packaging
+  conventions for wrapping a Go service and its web console for OpenWrt
+  (golang-package.mk, procd init reading UCI, LuCI iframe view).

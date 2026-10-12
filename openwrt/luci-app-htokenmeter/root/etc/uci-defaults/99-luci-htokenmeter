@@ -1,0 +1,3 @@
+#!/bin/sh
+[ -f /etc/config/htokenmeter ] || touch /etc/config/htokenmeter
+exit 0
