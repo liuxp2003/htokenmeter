@@ -6,3 +6,7 @@ web/dist/assets/
 *.db-wal
 *.db-shm
 .DS_Store
+.inf-qa/tests/.venv/
+.inf-qa/tests/.sut-data/
+.inf-qa/tests/.service.log
+.inf-cr/
