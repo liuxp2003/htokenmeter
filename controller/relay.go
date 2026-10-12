@@ -79,6 +79,19 @@ func pickChannel(c *gin.Context, task *relayTask, retry int) (*db.Channel, *help
 	if group == "" {
 		group = "default"
 	}
+	if task.ClientModel == "" {
+		// GET /v1/responses/:id: no model known; use any enabled
+		// openai-compatible channel.
+		if task.ClientFormat == helper.FormatResponses {
+			if ch := anyChannelOfType(db.TypeOpenAICompat); ch != nil {
+				c.Set(middleware.CtxChannelId, ch.Id)
+				c.Set(middleware.CtxChannelType, ch.Type)
+				c.Set(middleware.CtxChannelName, ch.Name)
+				return ch, nil
+			}
+		}
+		return nil, helper.Errorf(http.StatusBadRequest, "model is required")
+	}
 	ch, err := db.GetRandomSatisfiedChannel(group, task.ClientModel, retry)
 	if err != nil {
 		return nil, helper.Errorf(http.StatusServiceUnavailable,
@@ -375,4 +388,16 @@ func countImagesInBody(body []byte) int {
 		return 0
 	}
 	return len(probe.Data)
+}
+
+// anyChannelOfType returns the first enabled channel of a type (used by the
+// model-less GET /v1/responses/:id path).
+func anyChannelOfType(channelType int) *db.Channel {
+	var ch db.Channel
+	err := db.DB.Where("type = ? AND status = ?", channelType, db.ChannelStatusEnabled).
+		Order("priority desc, id asc").First(&ch).Error
+	if err != nil {
+		return nil
+	}
+	return &ch
 }

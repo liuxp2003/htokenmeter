@@ -41,6 +41,11 @@ func parseRelayRequest(c *gin.Context, format helper.Format) (*relayTask, *helpe
 		task.ClientModel = req.Model
 
 	case format == helper.FormatResponses:
+		if c.Request.Method != http.MethodPost {
+			// GET /v1/responses/:id has no body; route to any openai channel.
+			task.ClientModel = ""
+			return task, nil
+		}
 		var probe struct {
 			Model string `json:"model"`
 		}
