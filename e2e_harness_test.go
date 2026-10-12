@@ -61,7 +61,7 @@ func mockOpenAI(t *testing.T) *httptest.Server {
 		if strings.HasSuffix(r.URL.Path, "/v1/models") {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"object": "list",
-				"data": []any{map[string]any{"id": "test-model", "object": "model"}},
+				"data":   []any{map[string]any{"id": "test-model", "object": "model"}},
 			})
 			return
 		}
@@ -79,10 +79,10 @@ func mockAnthropic(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": "msg_1", "type": "message", "role": "assistant",
-			"content": []any{map[string]any{"type": "text", "text": "Bonjour!"}},
-			"model": "claude-test",
+			"content":     []any{map[string]any{"type": "text", "text": "Bonjour!"}},
+			"model":       "claude-test",
 			"stop_reason": "end_turn",
-			"usage": map[string]any{"input_tokens": 7, "output_tokens": 3},
+			"usage":       map[string]any{"input_tokens": 7, "output_tokens": 3},
 		})
 	}))
 }
@@ -97,7 +97,7 @@ func mockGemini(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"candidates": []any{map[string]any{
-				"content": map[string]any{"role": "model", "parts": []any{map[string]any{"text": "Ciao!"}}},
+				"content":      map[string]any{"role": "model", "parts": []any{map[string]any{"text": "Ciao!"}}},
 				"finishReason": "STOP",
 			}},
 			"usageMetadata": map[string]any{
