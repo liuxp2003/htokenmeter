@@ -23,7 +23,7 @@
 
 ```bash
 cd htokenmeter
-make build                 # 产出 dist/htokenmeter（控制台已内嵌）
+make -f Makefile.dev build # 产出 dist/htokenmeter（控制台已内嵌）
 ./dist/htokenmeter --port 8317 --config-dir ./data
 ```
 

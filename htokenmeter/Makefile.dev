@@ -1,4 +1,14 @@
-# htokenmeter dev tasks (buildroot never reads this file; it uses Makefile)
+# htokenmeter dev tasks.
+#
+# ⚠️ FILENAME MATTERS: this file MUST NOT be named GNUmakefile / makefile /
+# Makefile — GNU make auto-prefers those over the OpenWrt package Makefile,
+# and the buildroot's `make package/htokenmeter/compile` would then read the
+# dev file instead ("No rule to make target 'compile'"). Keep it Makefile.dev
+# (make only auto-reads the three canonical names; -f is required to use it).
+#
+# Usage: make -f Makefile.dev build|test|web|dev|dist|clean
+
+
 GO ?= go
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X github.com/lxp/htokenmeter/common.Version=$(VERSION)
