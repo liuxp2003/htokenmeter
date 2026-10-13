@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Copyright (C) 2026 htokenmeter contributors
 
@@ -9,14 +9,13 @@ PKG_VERSION:=0.1.0
 PKG_RELEASE:=1
 
 # Build from a release tarball (set by CI) or from the local source tree.
-# Local build: symlink this directory into openwrt/package/ and run
-#   make package/htokenmeter/compile V=s
-# Source fallback points at the same directory as this Makefile.
+# Repo-as-feed layout (OpenAppFilter convention): clone this repo into
+# openwrt/package/ and run `make package/open-htokenmeter/compile V=s`.
 PKG_SOURCE_URL:=https://github.com/lxp/htokenmeter
 PKG_SOURCE_VERSION:=HEAD
 PKG_SOURCE_PROTO:=git
 
-PKG_LICENSE:=MIT
+PKG_LICENSE:=GPL-3.0-or-later
 PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=htokenmeter maintainers
 

@@ -48,13 +48,17 @@ LuCI → 服务 → htokenmeter：Console 页打开控制台（HTTPS LuCI 下用
 
 ### 方式 B：源码集成进固件
 
+仓库即 feed（OpenAppFilter 约定）：直接 clone 进 `package/`，无需拷贝。
+
 ```bash
-git clone https://github.com/lxp/htokenmeter package/htokenmeter-repo
-ln -s package/htokenmeter-repo/openwrt/htokenmeter package/feeds/htokenmeter 2>/dev/null || true
-cp -r package/htokenmeter-repo/openwrt/* package/
+git clone https://github.com/lxp/htokenmeter package/htokenmeter
 make menuconfig   # Network -> AI Gateway -> htokenmeter / luci-app-htokenmeter
-make -j$(nproc)
+# 或：echo "CONFIG_PACKAGE_luci-app-htokenmeter=y" >> .config && make defconfig
+make package/luci-app-htokenmeter/compile V=s   # 单独编译两个包
+# 或整固件集成：make -j$(nproc)
 ```
+
+`init` 脚本会在 `/etc/config/htokenmeter` 缺失时自动生成默认配置（enabled=0）。
 
 ### 设备要求
 
@@ -89,4 +93,4 @@ make -j$(nproc)
 
 数据表：users / tokens / channels / abilities / options / logs / model_prices。
 
-许可：MIT（见 [LICENSE](LICENSE)）。架构参考与许可边界见 [NOTICE](NOTICE)。
+许可：GPL-3.0-or-later（见 [LICENSE](LICENSE)）。架构参考与许可边界见 [NOTICE](NOTICE)。

@@ -1,5 +1,5 @@
 #!/bin/sh /etc/rc.common
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 START=99
 STOP=15
@@ -8,6 +8,33 @@ NAME=htokenmeter
 PROG=/usr/bin/htokenmeter
 
 CONFDIR=/etc/htokenmeter
+
+# Ensure the UCI config exists even when the conffile was lost or an
+# upgrade removed it (OpenAppFilter pattern): without a matching section
+# type, config_foreach silently starts nothing.
+ensure_config_file()
+{
+    local file="$1"
+
+    [ -e "$file" ] && return
+    mkdir -p /etc/config
+    cat > "$file"
+    chmod 0644 "$file"
+}
+
+ensure_default_configs()
+{
+    ensure_config_file /etc/config/htokenmeter <<'EOF'
+config htokenmeter 'config'
+	option enabled '0'
+	option port '8317'
+	option db_path ''
+	option log_dir ''
+	option log_retention '30'
+	option retry_times '3'
+	option delay '5'
+EOF
+}
 
 start_instance() {
     local cfg="$1"
@@ -54,6 +81,7 @@ start_instance() {
 }
 
 start_service() {
+    ensure_default_configs
     config_load "$NAME"
     config_foreach start_instance "$NAME"
 }

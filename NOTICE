@@ -17,7 +17,3 @@ Architecture references:
   downstream endpoints with auth header normalization, the multi-format
   adaptor interface, weighted channel selection, and billing safety
   invariants (centralized quota math, bounded billing multipliers).
-
-- luci-app-ddns-go (https://github.com/sirpdboy/luci-app-ddns-go) packaging
-  conventions for wrapping a Go service and its web console for OpenWrt
-  (golang-package.mk, procd init reading UCI, LuCI iframe view).
