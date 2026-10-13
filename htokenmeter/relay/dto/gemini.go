@@ -22,6 +22,41 @@ type GeminiPart struct {
 	Raw        map[string]any `json:"-"`
 }
 
+// UnmarshalJSON captures non-text/inline fields (functionCall,
+// functionResponse, ...) into Raw so tool traffic is not silently dropped.
+func (p *GeminiPart) UnmarshalJSON(data []byte) error {
+	type alias GeminiPart
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*p = GeminiPart(a)
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err == nil {
+		delete(m, "text")
+		delete(m, "inlineData")
+		if len(m) > 0 {
+			p.Raw = m
+		}
+	}
+	return nil
+}
+
+// MarshalJSON re-emits text/inline plus whatever Raw captured.
+func (p GeminiPart) MarshalJSON() ([]byte, error) {
+	m := make(map[string]any, len(p.Raw)+2)
+	for k, v := range p.Raw {
+		m[k] = v
+	}
+	if p.Text != "" {
+		m["text"] = p.Text
+	}
+	if p.InlineData != nil {
+		m["inlineData"] = p.InlineData
+	}
+	return json.Marshal(m)
+}
+
 type GeminiInline struct {
 	MimeType string `json:"mimeType"`
 	Data     string `json:"data"`

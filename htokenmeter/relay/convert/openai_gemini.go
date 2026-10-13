@@ -2,6 +2,7 @@ package convert
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/lxp/htokenmeter/relay/dto"
@@ -117,9 +118,14 @@ func OpenAIToGemini(req *dto.ChatRequest) map[string]any {
 		if err := json.Unmarshal(req.Tools, &in); err == nil {
 			var decls []map[string]any
 			for _, t := range in {
-				decls = append(decls, map[string]any{
+				decl := map[string]any{
 					"name": t.Function.Name, "description": t.Function.Description,
-				})
+				}
+				// Without parameters Gemini cannot type the call arguments (F015).
+				if len(t.Function.Parameters) > 0 {
+					decl["parameters"] = t.Function.Parameters
+				}
+				decls = append(decls, decl)
 			}
 			body["tools"] = []map[string]any{{"functionDeclarations": decls}}
 		}
@@ -133,6 +139,8 @@ func OpenAIToGemini(req *dto.ChatRequest) map[string]any {
 // GeminiToOpenAI converts a Gemini request into canonical form.
 func GeminiToOpenAI(model string, g *dto.GeminiRequest) *dto.ChatRequest {
 	out := &dto.ChatRequest{Model: model, Stream: false}
+	callSeq := 0
+	toolCallIdByName := map[string]string{}
 	if g.SystemInstruction != nil {
 		var text strings.Builder
 		for _, p := range g.SystemInstruction.Parts {
@@ -161,10 +169,13 @@ func GeminiToOpenAI(model string, g *dto.GeminiRequest) *dto.ChatRequest {
 				if fc, ok := p.Raw["functionCall"]; ok {
 					if m, ok := fc.(map[string]any); ok {
 						name, _ := m["name"].(string)
-						args, _ := json.Marshal(m["args"])
+						args := marshalGeminiArgs(m["args"])
+						id := fmt.Sprintf("call_%s_%d", name, callSeq)
+						callSeq++
+						toolCallIdByName[name] = id
 						toolCalls = append(toolCalls, dto.ToolCall{
-							Id: "call_" + name, Type: "function",
-							Function: dto.FunctionCall{Name: name, Arguments: string(args)},
+							Id: id, Type: "function",
+							Function: dto.FunctionCall{Name: name, Arguments: args},
 						})
 					}
 					continue
@@ -172,9 +183,10 @@ func GeminiToOpenAI(model string, g *dto.GeminiRequest) *dto.ChatRequest {
 				if fr, ok := p.Raw["functionResponse"]; ok {
 					if m, ok := fr.(map[string]any); ok {
 						name, _ := m["name"].(string)
-						resp, _ := json.Marshal(m["response"])
+						resp := marshalGeminiArgs(m["response"])
 						out.Messages = append(out.Messages, dto.Message{
-							Role: "tool", Name: name, Content: resp,
+							Role: "tool", ToolCallId: toolCallIdByName[name], Name: name,
+							Content: dto.StringContent(resp),
 						})
 					}
 					continue
@@ -204,6 +216,19 @@ func GeminiToOpenAI(model string, g *dto.GeminiRequest) *dto.ChatRequest {
 		}
 	}
 	return out
+}
+
+// marshalGeminiArgs renders a Gemini args/response value as JSON text,
+// defaulting missing args to "{}" instead of "null".
+func marshalGeminiArgs(v any) string {
+	if v == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(v)
+	if err != nil || string(b) == "null" {
+		return "{}"
+	}
+	return string(b)
 }
 
 func splitDataURL(url string) (mime, data string, ok bool) {

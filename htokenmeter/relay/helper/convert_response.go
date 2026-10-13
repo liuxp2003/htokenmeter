@@ -2,11 +2,25 @@ package helper
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/lxp/htokenmeter/relay/dto"
 )
+
+// geminiArgsJSON renders a Gemini args value as JSON text, defaulting
+// missing args to "{}" instead of "null".
+func geminiArgsJSON(v any) string {
+	if v == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(v)
+	if err != nil || string(b) == "null" {
+		return "{}"
+	}
+	return string(b)
+}
 
 // RelayConvert handles cross-format responses. Non-stream converts the body;
 // stream re-emits SSE in the client format (see convert_stream.go).
@@ -187,6 +201,7 @@ func geminiBodyToOpenAI(body []byte, rc *RelayContext, usage *dto.Usage) ([]byte
 	var text string
 	var toolCalls []dto.ToolCall
 	if len(gr.Candidates) > 0 {
+		callSeq := 0
 		for _, p := range gr.Candidates[0].Content.Parts {
 			if p.Text != "" {
 				text += p.Text
@@ -195,11 +210,12 @@ func geminiBodyToOpenAI(body []byte, rc *RelayContext, usage *dto.Usage) ([]byte
 				if fc, ok := p.Raw["functionCall"]; ok {
 					if m, ok := fc.(map[string]any); ok {
 						name, _ := m["name"].(string)
-						args, _ := json.Marshal(m["args"])
+						args := geminiArgsJSON(m["args"])
 						toolCalls = append(toolCalls, dto.ToolCall{
-							Id: "call_" + name, Type: "function",
-							Function: dto.FunctionCall{Name: name, Arguments: string(args)},
+							Id: fmt.Sprintf("call_%s_%d", name, callSeq), Type: "function",
+							Function: dto.FunctionCall{Name: name, Arguments: args},
 						})
+						callSeq++
 					}
 				}
 			}
@@ -208,7 +224,9 @@ func geminiBodyToOpenAI(body []byte, rc *RelayContext, usage *dto.Usage) ([]byte
 	msg.Content = dto.StringContent(text)
 	msg.ToolCalls = toolCalls
 	fr := "stop"
-	if len(gr.Candidates) > 0 && gr.Candidates[0].FinishReason == "MAX_TOKENS" {
+	if len(toolCalls) > 0 {
+		fr = "tool_calls"
+	} else if len(gr.Candidates) > 0 && gr.Candidates[0].FinishReason == "MAX_TOKENS" {
 		fr = "length"
 	}
 	out.Choices = []dto.Choice{{Index: 0, Message: &msg, FinishReason: &fr}}
@@ -277,12 +295,30 @@ func openAIBodyToGemini(body []byte, rc *RelayContext, usage *dto.Usage) ([]byte
 		return nil, usage, err
 	}
 	gr := dto.GeminiResponse{ModelVersion: rc.ClientModel}
-	part := dto.GeminiPart{}
+	var parts []dto.GeminiPart
 	if len(or.Choices) > 0 && or.Choices[0].Message != nil {
-		part.Text = or.Choices[0].Message.TextContent()
+		m := or.Choices[0].Message
+		if t := m.TextContent(); t != "" {
+			parts = append(parts, dto.GeminiPart{Text: t})
+		}
+		// Assistant tool calls surface as functionCall parts (F015).
+		for _, tc := range m.ToolCalls {
+			args := json.RawMessage(tc.Function.Arguments)
+			if len(args) == 0 {
+				args = json.RawMessage("{}")
+			}
+			parts = append(parts, dto.GeminiPart{
+				Raw: map[string]any{"functionCall": map[string]any{
+					"name": tc.Function.Name, "args": args,
+				}},
+			})
+		}
+	}
+	if len(parts) == 0 {
+		parts = []dto.GeminiPart{{Text: ""}}
 	}
 	gr.Candidates = []dto.GeminiCandidate{{
-		Content:      dto.GeminiContent{Role: "model", Parts: []dto.GeminiPart{part}},
+		Content:      dto.GeminiContent{Role: "model", Parts: parts},
 		FinishReason: "STOP",
 	}}
 	if usage != nil {

@@ -3,6 +3,7 @@ package helper
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -197,6 +198,7 @@ func streamClaudeToOpenAI(sc interface {
 	var usage *dto.Usage
 	id := "chatcmpl-" + strconv.FormatInt(nowUnixNano(), 10)
 	toolIdx := -1
+	stopReason := ""
 	for sc.Scan() {
 		line := sc.Bytes()
 		if !bytes.HasPrefix(line, []byte("data:")) {
@@ -224,11 +226,23 @@ func streamClaudeToOpenAI(sc interface {
 				Usage *dto.ClaudeUsage `json:"usage"`
 			} `json:"message"`
 			Usage *dto.ClaudeUsage `json:"usage"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
 		}
 		if json.Unmarshal(data, &ev) != nil {
 			continue
 		}
 		switch ev.Type {
+		case "error":
+			// Upstream failed mid-stream: surface an OpenAI-shaped error chunk
+			// instead of fabricating a clean finish (F021).
+			emit(mustMarshal(map[string]any{
+				"error": map[string]any{
+					"message": ev.Error.Message, "type": "api_error", "param": "", "code": nil,
+				},
+			}))
+			return usage
 		case "message_start":
 			if ev.Message != nil && ev.Message.Usage != nil {
 				u := ev.Message.Usage
@@ -277,11 +291,17 @@ func streamClaudeToOpenAI(sc interface {
 			if ev.Usage != nil && usage != nil {
 				usage.CompletionTokens = ev.Usage.OutputTokens
 			}
+			if ev.Delta != nil && ev.Delta.StopReason != "" {
+				stopReason = ev.Delta.StopReason
+			}
 		}
 	}
 	fr := "stop"
-	if toolIdx >= 0 {
+	switch {
+	case toolIdx >= 0 || stopReason == "tool_use":
 		fr = "tool_calls"
+	case stopReason == "max_tokens":
+		fr = "length"
 	}
 	done := map[string]any{
 		"id": id, "object": "chat.completion.chunk", "created": nowUnix(), "model": rc.ClientModel,
@@ -367,6 +387,7 @@ func streamGeminiToOpenAI(sc interface {
 }, emit sseEmitter, rc *RelayContext) *dto.Usage {
 	var usage *dto.Usage
 	id := "chatcmpl-" + strconv.FormatInt(nowUnixNano(), 10)
+	toolCallCount := 0
 	for sc.Scan() {
 		line := sc.Bytes()
 		if !bytes.HasPrefix(line, []byte("data:")) {
@@ -380,7 +401,11 @@ func streamGeminiToOpenAI(sc interface {
 			Candidates []struct {
 				Content struct {
 					Parts []struct {
-						Text string `json:"text"`
+						Text         string `json:"text"`
+						FunctionCall *struct {
+							Name string          `json:"name"`
+							Args json.RawMessage `json:"args"`
+						} `json:"functionCall"`
 					} `json:"parts"`
 				} `json:"content"`
 				FinishReason string `json:"finishReason"`
@@ -395,6 +420,26 @@ func streamGeminiToOpenAI(sc interface {
 		}
 		for _, cand := range chunk.Candidates {
 			for _, p := range cand.Content.Parts {
+				if p.FunctionCall != nil {
+					// Gemini delivers a complete functionCall in one part;
+					// emit it as a single tool_calls delta (F015).
+					args := string(p.FunctionCall.Args)
+					if args == "" || args == "null" {
+						args = "{}"
+					}
+					emit(mustMarshal(map[string]any{
+						"id": id, "object": "chat.completion.chunk", "created": nowUnix(), "model": rc.ClientModel,
+						"choices": []map[string]any{{"index": 0, "delta": map[string]any{
+							"tool_calls": []map[string]any{{
+								"index": toolCallCount, "id": fmt.Sprintf("call_%s_%d", p.FunctionCall.Name, toolCallCount),
+								"type": "function",
+								"function": map[string]any{"name": p.FunctionCall.Name, "arguments": args},
+							}},
+						}, "finish_reason": nil}},
+					}))
+					toolCallCount++
+					continue
+				}
 				if p.Text == "" {
 					continue
 				}
@@ -406,6 +451,9 @@ func streamGeminiToOpenAI(sc interface {
 		}
 	}
 	fr := "stop"
+	if toolCallCount > 0 {
+		fr = "tool_calls"
+	}
 	emit(mustMarshal(map[string]any{
 		"id": id, "object": "chat.completion.chunk", "created": nowUnix(), "model": rc.ClientModel,
 		"choices": []map[string]any{{"index": 0, "delta": map[string]any{}, "finish_reason": fr}},
