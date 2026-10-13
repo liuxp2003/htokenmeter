@@ -373,7 +373,7 @@ func recordSuccess(c *gin.Context, ch *db.Channel, task *relayTask, usage *dto.U
 	}
 	cost := int64(0)
 	if p, ok := db.GetPrice(task.ClientModel); ok {
-		cost = p.CostMicroUsd(usage.PromptTokens, usage.CompletionTokens, usage.CacheReadTokens, usage.Images, usage.PromptIncludesCache)
+		cost = p.CostMicroUsd(usage.PromptTokens, usage.CompletionTokens, usage.CacheReadTokens, usage.CacheWriteTokens, usage.Images, usage.PromptIncludesCache)
 	}
 	userId := c.GetInt(middleware.CtxUserId)
 	tokenId := c.GetInt(middleware.CtxTokenId)
@@ -383,7 +383,7 @@ func recordSuccess(c *gin.Context, ch *db.Channel, task *relayTask, usage *dto.U
 			UserId: userId, TokenId: tokenId, TokenName: tokenName,
 			ChannelId: ch.Id, ChannelName: ch.Name, ModelName: task.ClientModel,
 			PromptTokens: int(usage.PromptTokens), CompletionTokens: int(usage.CompletionTokens),
-			CacheReadTokens: int(usage.CacheReadTokens), CostMicroUsd: cost,
+			CacheReadTokens: int(usage.CacheReadTokens), CacheWriteTokens: int(usage.CacheWriteTokens), CostMicroUsd: cost,
 			IsStream: task.Stream, ElapsedTimeMs: 0,
 		})
 		var tk db.Token

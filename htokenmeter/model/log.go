@@ -19,6 +19,7 @@ type Log struct {
 	PromptTokens     int    `json:"prompt_tokens"`
 	CompletionTokens int    `json:"completion_tokens"`
 	CacheReadTokens  int    `json:"cache_read_tokens"`
+	CacheWriteTokens int    `json:"cache_write_tokens"`
 	CostMicroUsd     int64  `json:"cost_micro_usd"`
 	IsStream         bool   `json:"is_stream"`
 	ElapsedTimeMs    int64  `json:"elapsed_time_ms"`

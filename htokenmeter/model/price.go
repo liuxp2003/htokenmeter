@@ -35,7 +35,9 @@ func DeletePrice(model string) error {
 // cacheRead is a discounted subset of promptTokens when promptIncludesCache
 // is true (OpenAI/Gemini semantics); Claude reports cached tokens disjoint
 // from input_tokens, so there the full-rate input is all of promptTokens.
-func (p ModelPrice) CostMicroUsd(promptTokens, completionTokens, cacheRead int64, images int, promptIncludesCache bool) int64 {
+// cacheWrite tokens are always disjoint from the input count and are billed
+// at CacheWriteUsd on top (Anthropic cache-creation pricing).
+func (p ModelPrice) CostMicroUsd(promptTokens, completionTokens, cacheRead, cacheWrite int64, images int, promptIncludesCache bool) int64 {
 	fullRateInput := promptTokens
 	if promptIncludesCache {
 		fullRateInput -= cacheRead
@@ -45,6 +47,7 @@ func (p ModelPrice) CostMicroUsd(promptTokens, completionTokens, cacheRead int64
 	}
 	cost := p.PromptUsd*float64(fullRateInput)/1e6 +
 		p.CacheReadUsd*float64(cacheRead)/1e6 +
+		p.CacheWriteUsd*float64(cacheWrite)/1e6 +
 		p.CompletionUsd*float64(completionTokens)/1e6 +
 		p.ImageUsd*float64(images) +
 		p.PerRequestUsd

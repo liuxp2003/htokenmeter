@@ -110,23 +110,30 @@ func (u *responsesUsage) toUsage() *dto.Usage {
 	if u.InputTokensDetails != nil {
 		out.CacheReadTokens = u.InputTokensDetails.CachedTokens
 	}
-	if u.OutputTokensDetails != nil {
-		out.CompletionTokens += u.OutputTokensDetails.ReasoningTokens
-	}
+	// output_tokens already contains reasoning_tokens (it is a breakdown,
+	// not an addend) — no CompletionTokens adjustment here.
 	// Responses input_tokens counts cached tokens as a subset.
 	out.PromptIncludesCache = true
 	return out
 }
 
-// ExtractUsageFromResponsesBody pulls usage from a Responses API JSON body.
+// ExtractUsageFromResponsesBody pulls usage from a Responses API JSON body,
+// covering both the non-stream top-level form and the streaming
+// response.completed shape where usage nests under "response".
 func ExtractUsageFromResponsesBody(body []byte) *dto.Usage {
 	var probe struct {
-		Usage *responsesUsage `json:"usage"`
+		Usage    *responsesUsage `json:"usage"`
+		Response struct {
+			Usage *responsesUsage `json:"usage"`
+		} `json:"response"`
 	}
-	if err := json.Unmarshal(body, &probe); err != nil || probe.Usage == nil {
+	if err := json.Unmarshal(body, &probe); err != nil {
 		return nil
 	}
-	return probe.Usage.toUsage()
+	if probe.Usage != nil {
+		return probe.Usage.toUsage()
+	}
+	return probe.Response.Usage.toUsage()
 }
 
 // writeNoStoreHeaders prevents caches from holding error/API bodies.
