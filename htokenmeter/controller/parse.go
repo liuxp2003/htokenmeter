@@ -79,6 +79,11 @@ func parseRelayRequest(c *gin.Context, format helper.Format) (*relayTask, *helpe
 		if err := json.Unmarshal(body, &oreq); err != nil {
 			return nil, helper.Errorf(http.StatusBadRequest, "invalid request: %v", err)
 		}
+		if oreq.Model == "" && path == "/v1/moderations" {
+			// OpenAI makes the model optional for moderations; mirror the
+			// documented default (Distribute applies the same for routing).
+			oreq.Model = common.DefaultModerationModel
+		}
 		if oreq.Model == "" {
 			return nil, helper.Errorf(http.StatusBadRequest, "model is required")
 		}

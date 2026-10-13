@@ -48,6 +48,13 @@ func Get(channelType int) (Adaptor, error) {
 	return nil, fmt.Errorf("unsupported channel type %d", channelType)
 }
 
+// EndpointRouter is implemented by adaptors that can serve non-chat
+// endpoints (legacy "completions", "moderations") at their native upstream
+// path. Adaptors without it cannot serve those endpoints.
+type EndpointRouter interface {
+	EndpointURL(m *Meta, endpoint string) string
+}
+
 func trimSlash(s string) string {
 	for len(s) > 0 && s[len(s)-1] == '/' {
 		s = s[:len(s)-1]

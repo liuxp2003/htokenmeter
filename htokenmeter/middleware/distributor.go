@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/lxp/htokenmeter/common"
 	db "github.com/lxp/htokenmeter/model"
 )
 
@@ -42,6 +43,13 @@ func selectChannel(c *gin.Context) {
 		group = "default"
 	}
 	model := c.GetString(CtxRequestModel)
+	// Moderations bodies may omit the model (OpenAI semantics); apply the
+	// documented default before routing so ability selection and the
+	// whitelist see a concrete model (F007).
+	if model == "" && c.Request.URL.Path == "/v1/moderations" {
+		model = common.DefaultModerationModel
+		c.Set(CtxRequestModel, model)
+	}
 	if model == "" {
 		abortOpenAI(c, http.StatusBadRequest, "model is required")
 		return

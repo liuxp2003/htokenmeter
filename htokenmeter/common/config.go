@@ -24,6 +24,10 @@ var (
 	LogRetention  = 30 // days, 0 = keep forever
 	QuotaWarnUsd  = 0.0
 	TestFrequency = 0 // minutes, 0 = disabled
+
+	// DefaultModerationModel is OpenAI's documented default for
+	// /v1/moderations requests that omit the model field.
+	DefaultModerationModel = "text-moderation-latest"
 )
 
 func EnvInt(key string, def int) int {

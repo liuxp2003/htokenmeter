@@ -29,6 +29,9 @@ func (a *OpenAICompat) ChatURL(m *Meta) string {
 }
 func (a *OpenAICompat) EmbeddingURL(m *Meta) string { return a.base(m) + "/v1/embeddings" }
 func (a *OpenAICompat) ImageURL(m *Meta) string     { return a.base(m) + "/v1/images/generations" }
+func (a *OpenAICompat) EndpointURL(m *Meta, ep string) string {
+	return a.base(m) + "/v1/" + ep
+}
 
 func (a *OpenAICompat) SetupHeaders(h http.Header, m *Meta) {
 	h.Set("Content-Type", "application/json")
@@ -181,6 +184,9 @@ func (a *Azure) ChatURL(m *Meta) string      { return a.deployURL(m, m.UpstreamM
 func (a *Azure) EmbeddingURL(m *Meta) string { return a.deployURL(m, m.UpstreamModel, "embeddings") }
 func (a *Azure) ImageURL(m *Meta) string {
 	return a.deployURL(m, m.UpstreamModel, "images/generations")
+}
+func (a *Azure) EndpointURL(m *Meta, ep string) string {
+	return a.deployURL(m, m.UpstreamModel, ep)
 }
 
 func (a *Azure) SetupHeaders(h http.Header, m *Meta) {

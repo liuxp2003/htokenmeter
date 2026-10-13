@@ -167,6 +167,14 @@ func executeOnce(c *gin.Context, ch *db.Channel, task *relayTask) (*dto.Usage, *
 		return doPassthrough(c, ad, ch, meta, rc, task)
 	}
 
+	// Legacy endpoints must keep their native protocol — converting a
+	// legacy-completions body through the chat shape would silently change
+	// semantics, so they only work via passthrough (F007).
+	if ep := legacyEndpoint(c.Request.URL.Path); ep != "" {
+		return nil, helper.Errorf(http.StatusBadRequest,
+			"/v1/%s requires an OpenAI-compatible channel without model mapping for model %s", ep, task.ClientModel)
+	}
+
 	// Convert canonical -> upstream body.
 	var reqURL string
 	var body []byte
@@ -269,11 +277,32 @@ func doPassthrough(c *gin.Context, ad adaptor.Adaptor, ch *db.Channel, meta *ada
 	if task.Stream && rc.UpstreamFormat == helper.FormatGemini {
 		reqURL = streamChatURL(ad, meta)
 	}
+	// Legacy endpoints reach their real upstream path instead of chat (F007).
+	if ep := legacyEndpoint(c.Request.URL.Path); ep != "" {
+		er, ok := ad.(adaptor.EndpointRouter)
+		if !ok {
+			return nil, helper.Errorf(http.StatusBadRequest,
+				"channel type does not serve /v1/%s for model %s", ep, task.ClientModel)
+		}
+		reqURL = er.EndpointURL(meta, ep)
+	}
 	resp, err := doUpstreamRequest(c, ad, meta, http.MethodPost, reqURL, body, task.Stream)
 	if err != nil {
 		return nil, helper.Errorf(http.StatusBadGateway, "upstream request failed: %v", err)
 	}
 	return helper.RelayPassthrough(c.Writer, resp, rc)
+}
+
+// legacyEndpoint maps chat-family client endpoints that are NOT
+// chat/completions and must reach their own upstream path.
+func legacyEndpoint(path string) string {
+	switch path {
+	case "/v1/completions":
+		return "completions"
+	case "/v1/moderations":
+		return "moderations"
+	}
+	return ""
 }
 
 // ensureIncludeUsage injects stream_options.include_usage into an OpenAI body.
