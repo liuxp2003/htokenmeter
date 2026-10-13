@@ -22,8 +22,9 @@
 ## 快速开始（本机）
 
 ```bash
-make build
-./htokenmeter --port 8317 --config-dir ./data
+cd htokenmeter
+make build                 # 产出 dist/htokenmeter（控制台已内嵌）
+./dist/htokenmeter --port 8317 --config-dir ./data
 ```
 
 首次启动会在日志打印管理员随机密码（`first boot` 行）。浏览器打开
@@ -54,7 +55,8 @@ LuCI → 服务 → htokenmeter：Console 页打开控制台（HTTPS LuCI 下用
 git clone https://github.com/lxp/htokenmeter package/htokenmeter
 make menuconfig   # Network -> AI Gateway -> htokenmeter / luci-app-htokenmeter
 # 或：echo "CONFIG_PACKAGE_luci-app-htokenmeter=y" >> .config && make defconfig
-make package/luci-app-htokenmeter/compile V=s   # 单独编译两个包
+make package/htokenmeter/compile V=s            # 单独编译（OAF 式源内包目录）
+# 或 make package/luci-app-htokenmeter/compile V=s
 # 或整固件集成：make -j$(nproc)
 ```
 
