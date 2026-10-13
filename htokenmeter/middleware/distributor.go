@@ -60,7 +60,7 @@ func selectChannel(c *gin.Context) {
 			return
 		}
 	}
-	ch, err := db.GetRandomSatisfiedChannel(group, model, 0)
+	ch, err := db.GetRandomSatisfiedChannel(group, model, 0, nil)
 	if err != nil {
 		abortOpenAI(c, http.StatusServiceUnavailable,
 			"no available channel for model "+model+" in group "+group)

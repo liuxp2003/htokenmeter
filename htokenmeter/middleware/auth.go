@@ -178,8 +178,14 @@ func probeRequestModel(c *gin.Context) string {
 		return ""
 	}
 	body := common.PeekBody(c)
-	if len(body) == 0 || len(body) > 4<<20 {
+	if len(body) == 0 {
 		return ""
+	}
+	// Scan a 4MiB prefix instead of bailing on oversized bodies: the
+	// top-level model sits early in SDK-shaped JSON, and a base64 image
+	// pushing past 4MiB must not make the request unroutable (F018).
+	if len(body) > 4<<20 {
+		body = body[:4<<20]
 	}
 	// Minimal scan for "model":"..." without full unmarshal.
 	return common.ExtractJSONStringField(body, "model")

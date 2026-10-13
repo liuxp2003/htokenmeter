@@ -99,11 +99,22 @@ var errConsistency = errors.New("database consistency error: channel missing, pl
 // GetRandomSatisfiedChannel picks a channel for group+model.
 // retry selects the (retry+1)-th priority tier; within the tier channels are
 // picked by weighted random with uniform fallback when all weights are zero.
-func GetRandomSatisfiedChannel(group, model string, retry int) (*Channel, error) {
+// exclude lists channel IDs that already failed this request (F027) so a
+// retry never lands on the same upstream while alternatives exist.
+func GetRandomSatisfiedChannel(group, model string, retry int, exclude map[int]bool) (*Channel, error) {
 	var abs []Ability
 	if err := DB.Where("`group` = ? AND model = ? AND enabled = ?", group, model, true).
 		Find(&abs).Error; err != nil {
 		return nil, err
+	}
+	if len(exclude) > 0 {
+		kept := abs[:0]
+		for _, a := range abs {
+			if !exclude[a.ChannelId] {
+				kept = append(kept, a)
+			}
+		}
+		abs = kept
 	}
 	if len(abs) == 0 {
 		return nil, gorm.ErrRecordNotFound

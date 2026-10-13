@@ -4,11 +4,13 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -41,8 +43,9 @@ func Relay(c *gin.Context, clientFormat helper.Format) {
 		return
 	}
 
+	tried := map[int]bool{} // channels that already failed this request
 	for retry := 0; retry <= common.RetryTimes; retry++ {
-		channel, rerr2 := pickChannel(c, task, retry)
+		channel, rerr2 := pickChannel(c, task, retry, tried)
 		if rerr2 != nil {
 			helper.WriteError(c.Writer, clientFormat, rerr2)
 			return
@@ -58,13 +61,14 @@ func Relay(c *gin.Context, clientFormat helper.Format) {
 			helper.WriteError(c.Writer, clientFormat, rerr3)
 			return
 		}
+		tried[channel.Id] = true
 		c.Set(middleware.CtxChannelId, 0) // force re-selection
 		common.Info("relay retry %d after status %d (channel %s)", retry+1, rerr3.StatusCode, channel.Name)
 	}
 }
 
 // pickChannel selects a channel honoring the admin pin and retry tier.
-func pickChannel(c *gin.Context, task *relayTask, retry int) (*db.Channel, *helper.RelayError) {
+func pickChannel(c *gin.Context, task *relayTask, retry int, tried map[int]bool) (*db.Channel, *helper.RelayError) {
 	// Re-check the token model whitelist against the parsed model: the
 	// middleware check runs on a byte-scan probe that takes the FIRST
 	// "model" key, while encoding/json routes by the LAST — a duplicate
@@ -110,7 +114,7 @@ func pickChannel(c *gin.Context, task *relayTask, retry int) (*db.Channel, *help
 		}
 		return nil, helper.Errorf(http.StatusBadRequest, "model is required")
 	}
-	ch, err := db.GetRandomSatisfiedChannel(group, task.ClientModel, retry)
+	ch, err := db.GetRandomSatisfiedChannel(group, task.ClientModel, retry, tried)
 	if err != nil {
 		return nil, helper.Errorf(http.StatusServiceUnavailable,
 			"no available channel for model %s in group %s", task.ClientModel, group)
@@ -194,7 +198,7 @@ func executeOnce(c *gin.Context, ch *db.Channel, task *relayTask) (*dto.Usage, *
 		return nil, helper.Errorf(http.StatusBadRequest, "convert request: %v", err)
 	}
 
-	resp, err := doUpstreamRequest(c, ad, meta, http.MethodPost, reqURL, body)
+	resp, err := doUpstreamRequest(c, ad, meta, http.MethodPost, reqURL, body, task.Stream)
 	if err != nil {
 		return nil, helper.Errorf(http.StatusBadGateway, "upstream request failed: %v", err)
 	}
@@ -265,7 +269,7 @@ func doPassthrough(c *gin.Context, ad adaptor.Adaptor, ch *db.Channel, meta *ada
 	if task.Stream && rc.UpstreamFormat == helper.FormatGemini {
 		reqURL = streamChatURL(ad, meta)
 	}
-	resp, err := doUpstreamRequest(c, ad, meta, http.MethodPost, reqURL, body)
+	resp, err := doUpstreamRequest(c, ad, meta, http.MethodPost, reqURL, body, task.Stream)
 	if err != nil {
 		return nil, helper.Errorf(http.StatusBadGateway, "upstream request failed: %v", err)
 	}
@@ -305,7 +309,7 @@ func doResponsesPassthrough(c *gin.Context, ch *db.Channel, meta *adaptor.Meta, 
 	if method != http.MethodPost {
 		method = http.MethodGet
 	}
-	resp, err := doUpstreamRequest(c, ad, meta, method, reqURL, task.rawBody)
+	resp, err := doUpstreamRequest(c, ad, meta, method, reqURL, task.rawBody, task.Stream)
 	if err != nil {
 		return nil, helper.Errorf(http.StatusBadGateway, "upstream request failed: %v", err)
 	}
@@ -313,8 +317,11 @@ func doResponsesPassthrough(c *gin.Context, ch *db.Channel, meta *adaptor.Meta, 
 	return helper.RelayPassthrough(c.Writer, resp, rc)
 }
 
-// doUpstreamRequest performs the HTTP call with channel headers.
-func doUpstreamRequest(c *gin.Context, ad adaptor.Adaptor, meta *adaptor.Meta, method, url string, body []byte) (*http.Response, error) {
+// doUpstreamRequest performs the HTTP call with channel headers. Streaming
+// requests only cap time-to-headers (a deadline over the body would cut long
+// SSE streams mid-flight); non-stream requests keep a full-exchange deadline.
+// RelayTimeout <= 0 disables deadlines entirely.
+func doUpstreamRequest(c *gin.Context, ad adaptor.Adaptor, meta *adaptor.Meta, method, url string, body []byte, stream bool) (*http.Response, error) {
 	var reader io.Reader
 	if len(body) > 0 {
 		reader = bytes.NewReader(body)
@@ -325,7 +332,48 @@ func doUpstreamRequest(c *gin.Context, ad adaptor.Adaptor, meta *adaptor.Meta, m
 	}
 	ad.SetupHeaders(req.Header, meta)
 	client := helper.HTTPClient(meta.Proxy)
-	return client.Do(req)
+
+	var cancel context.CancelFunc
+	var timer *time.Timer
+	if timeout := time.Duration(common.RelayTimeout) * time.Second; timeout > 0 {
+		var ctx context.Context
+		ctx, cancel = context.WithCancel(req.Context())
+		timer = time.AfterFunc(timeout, cancel)
+		req = req.WithContext(ctx)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		if timer != nil {
+			timer.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
+		return nil, err
+	}
+	if stream && timer != nil {
+		timer.Stop() // headers are in — streams run as long as the client does
+	}
+	// Non-streams keep the timer as the whole-exchange cap; cancel also
+	// fires on body close so the context is always released.
+	resp.Body = &deadlineBody{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+// deadlineBody releases the request context once the body is closed. For
+// streams the timer was already neutralized at header time, so this cancel
+// is the only remaining trigger besides the parent context.
+type deadlineBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *deadlineBody) Close() error {
+	err := b.ReadCloser.Close()
+	if b.cancel != nil {
+		b.cancel()
+	}
+	return err
 }
 
 // shouldRetry mirrors the one-api policy: 429/5xx retry, 4xx no.
