@@ -9,3 +9,7 @@ web/dist/assets/
 .inf-qa/tests/.sut-data/
 .inf-qa/tests/.service.log
 .inf-cr/
+kb/
+.claude/
+.inf-qa/
+.github/
