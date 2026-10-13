@@ -21,7 +21,11 @@ PKG_BUILD_FLAGS:=no-mips16
 GO_PKG:=github.com/lxp/htokenmeter
 GO_PKG_LDFLAGS_X:=github.com/lxp/htokenmeter/common.Version=$(PKG_VERSION)
 GO_PKG_BUILD_PKG:=github.com/lxp/htokenmeter
-GO_PKG_LDFLAGS:=-s -w $(GO_PKG_LDFLAGS_X)
+# NOTE: golang-package.mk automatically appends "-X $(GO_PKG_LDFLAGS_X)" to
+# GO_PKG_LDFLAGS — do NOT inline $(GO_PKG_LDFLAGS_X) here; a bare
+# "importpath.name=value" token is an invalid linker flag and kills the
+# final link with the linker usage dump.
+GO_PKG_LDFLAGS:=-s -w
 
 include $(INCLUDE_DIR)/package.mk
 include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
