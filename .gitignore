@@ -1,4 +1,4 @@
-/dist/
+dist/
 web/node_modules/
 web/dist/assets/
 *.db
