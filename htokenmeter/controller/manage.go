@@ -183,17 +183,23 @@ func ListTokens(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	// Mask keys in list view; the create response is the only full-key surface.
+	for i := range ts {
+		if len(ts[i].Key) > 8 {
+			ts[i].Key = ts[i].Key[:8] + "..."
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": ts})
 }
 
 type tokenPayload struct {
-	Id          int     `json:"id"`
-	Name        string  `json:"name"`
-	Status      int     `json:"status"`
-	ExpiredTime int64   `json:"expired_time"`
-	QuotaUsd    float64 `json:"quota_usd"`
-	Models      string  `json:"models"`
-	Subnet      string  `json:"subnet"`
+	Id          int      `json:"id"`
+	Name        string   `json:"name"`
+	Status      int      `json:"status"`
+	ExpiredTime int64    `json:"expired_time"`
+	QuotaUsd    *float64 `json:"quota_usd"` // pointer: distinguish absent (-1) from explicit 0 (frozen)
+	Models      string   `json:"models"`
+	Subnet      string   `json:"subnet"`
 }
 
 func CreateToken(c *gin.Context) {
@@ -203,9 +209,13 @@ func CreateToken(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "name is required"})
 		return
 	}
+	quota := -1.0
+	if p.QuotaUsd != nil {
+		quota = *p.QuotaUsd
+	}
 	t := &db.Token{
 		UserId: userId, Name: p.Name, Status: db.TokenStatusEnabled,
-		ExpiredTime: orDefault(p.ExpiredTime, -1), QuotaUsd: orDefaultF(p.QuotaUsd, -1),
+		ExpiredTime: orDefault(p.ExpiredTime, -1), QuotaUsd: quota,
 		Models: p.Models, Subnet: p.Subnet,
 	}
 	if err := t.Insert(); err != nil {
@@ -230,7 +240,9 @@ func UpdateToken(c *gin.Context) {
 	t.Name = p.Name
 	t.Status = p.Status
 	t.ExpiredTime = p.ExpiredTime
-	t.QuotaUsd = p.QuotaUsd
+	if p.QuotaUsd != nil {
+		t.QuotaUsd = *p.QuotaUsd
+	}
 	t.Models = p.Models
 	t.Subnet = p.Subnet
 	if err := t.Update(); err != nil {
@@ -256,13 +268,6 @@ func DeleteToken(c *gin.Context) {
 }
 
 func orDefault(v, def int64) int64 {
-	if v == 0 {
-		return def
-	}
-	return v
-}
-
-func orDefaultF(v, def float64) float64 {
 	if v == 0 {
 		return def
 	}

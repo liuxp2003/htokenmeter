@@ -50,7 +50,7 @@ export default function TokensPage() {
     { title: '状态', dataIndex: 'status', render: (s) => s === 1 ? <Tag color="green">启用</Tag> : <Tag>停用</Tag> },
     {
       title: 'Key', dataIndex: 'key', render: (k) => (
-        <Typography.Text copyable={{ text: 'sk-' + k }} code>sk-{k.slice(0, 12)}…</Typography.Text>
+        <Typography.Text code>sk-{k}</Typography.Text>
       ),
     },
     { title: '预算', render: (_, r) => r.quota_usd < 0 ? '不限' : `${fmtUsd(r.used_usd * 1e6)} / $${r.quota_usd}` },
@@ -73,7 +73,7 @@ export default function TokensPage() {
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="models" label="允许的模型（逗号分隔，留空=全部）"><Input placeholder="gpt-4o,claude-sonnet-4-5" /></Form.Item>
-          <Form.Item name="quota_usd" label="预算上限 USD（-1 或留空=不限）"><InputNumber style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="quota_usd" label="预算上限 USD（-1/留空=不限，0=冻结）"><InputNumber style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="expired_days" label="有效天数（留空=永不过期）"><InputNumber style={{ width: '100%' }} min={1} /></Form.Item>
           <Form.Item name="subnet" label="IP 限制（CIDR 逗号分隔，留空=不限）"><Input placeholder="192.168.1.0/24" /></Form.Item>
         </Form>

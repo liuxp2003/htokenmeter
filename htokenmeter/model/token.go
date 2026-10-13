@@ -24,7 +24,7 @@ type Token struct {
 	CreatedTime  int64   `json:"created_time"`
 	AccessedTime int64   `json:"accessed_time"`
 	ExpiredTime  int64   `json:"expired_time" gorm:"default:-1"` // -1 = never
-	QuotaUsd     float64 `json:"quota_usd" gorm:"default:-1"`    // USD budget, -1 = unlimited
+	QuotaUsd     float64 `json:"quota_usd"` // USD budget, -1 = unlimited, 0 = frozen; no gorm default — zero must survive inserts
 	UsedUsd      float64 `json:"used_usd" gorm:"default:0"`
 	Models       string  `json:"models" gorm:"size:2048;default:''"` // comma list, empty = all
 	Subnet       string  `json:"subnet" gorm:"size:256;default:''"`
