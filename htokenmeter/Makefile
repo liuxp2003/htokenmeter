@@ -6,7 +6,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=htokenmeter
 PKG_VERSION:=0.1.0
-PKG_RELEASE:=3
+PKG_RELEASE:=4
 
 # OpenAppFilter convention: sources live in this directory (repo-as-feed —
 # clone the repo into openwrt/package/ and the package builds from the
