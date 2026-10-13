@@ -12,7 +12,7 @@ PKG_MAINTAINER:=htokenmeter maintainers
 PKG_CONFIG_DEPENDS:=
 
 LUCI_TITLE:=LuCI support for htokenmeter AI gateway
-LUCI_DEPENDS:=+htokenmeter
+LUCI_DEPENDS:=+luci-base +htokenmeter
 LUCI_PKGARCH:=all
 
 include $(TOPDIR)/feeds/luci/luci.mk
