@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -82,15 +83,21 @@ func (ch *Channel) ModelList() []string {
 	return splitComma(ch.Models)
 }
 
-// multiKeyState tracks round-robin index per channel (process local).
+// multiKeyState tracks round-robin index per channel (process local) and
+// per-key breaker timestamps (F028: broken keys heal after a cooldown via
+// a half-open probe instead of staying dead until every key breaks).
 var (
 	mkMu     sync.Mutex
 	mkIndex  = map[int]int{}
-	mkBroken = map[int]map[int]bool{} // channelId -> keyIdx -> broken
+	mkBroken = map[int]map[int]int64{} // channelId -> keyIdx -> broken-at unix
 )
 
+// keyBreakCooldown is how long a broken key rests before one probe request
+// is allowed through (half-open).
+const keyBreakCooldown = 10 * time.Minute
+
 // NextKey returns the key for this request: round-robin over healthy keys,
-// falling back to any key when all are marked broken.
+// half-open probing the longest-broken key when all are cooling down.
 func (ch *Channel) NextKey() (int, string) {
 	keys := ch.KeyList()
 	if len(keys) == 0 {
@@ -101,23 +108,38 @@ func (ch *Channel) NextKey() (int, string) {
 	}
 	mkMu.Lock()
 	defer mkMu.Unlock()
+	now := time.Now().Unix()
+	cooldown := int64(keyBreakCooldown.Seconds())
 	broken := mkBroken[ch.Id]
-	// Try up to len(keys) positions starting at the rr index.
 	start := mkIndex[ch.Id]
 	for i := 0; i < len(keys); i++ {
 		idx := (start + i) % len(keys)
-		if !broken[idx] {
-			mkIndex[ch.Id] = (idx + 1) % len(keys)
-			return idx, keys[idx]
+		if bt, ok := broken[idx]; ok {
+			if now-bt < cooldown {
+				continue
+			}
+			delete(broken, idx) // cooldown served: half-open again
+		}
+		mkIndex[ch.Id] = (idx + 1) % len(keys)
+		return idx, keys[idx]
+	}
+	// All keys are within cooldown: probe the one broken longest ago.
+	oldest, oldestAt := -1, int64(1<<62)
+	for idx, bt := range broken {
+		if idx >= len(keys) { // stale index after the key list shrank
+			delete(broken, idx)
+			continue
+		}
+		if bt < oldestAt {
+			oldest, oldestAt = idx, bt
 		}
 	}
-	// All broken: reset and use the rr position.
-	for k := range broken {
-		delete(broken, k)
+	if oldest < 0 {
+		oldest = start % len(keys)
 	}
-	idx := start % len(keys)
-	mkIndex[ch.Id] = (idx + 1) % len(keys)
-	return idx, keys[idx]
+	delete(broken, oldest)
+	mkIndex[ch.Id] = (oldest + 1) % len(keys)
+	return oldest, keys[oldest]
 }
 
 // MarkKeyBroken disables one key after auth-type failures.
@@ -125,20 +147,49 @@ func (ch *Channel) MarkKeyBroken(idx int) {
 	mkMu.Lock()
 	defer mkMu.Unlock()
 	if mkBroken[ch.Id] == nil {
-		mkBroken[ch.Id] = map[int]bool{}
+		mkBroken[ch.Id] = map[int]int64{}
 	}
-	mkBroken[ch.Id][idx] = true
-	if len(mkBroken[ch.Id]) >= len(ch.KeyList()) {
-		// Every key broken at least once -> escalate to channel disable by caller.
-		return
+	mkBroken[ch.Id][idx] = time.Now().Unix()
+}
+
+// MarkAllKeysBroken cools down every key (periodic test failure).
+func (ch *Channel) MarkAllKeysBroken() {
+	mkMu.Lock()
+	defer mkMu.Unlock()
+	now := time.Now().Unix()
+	if mkBroken[ch.Id] == nil {
+		mkBroken[ch.Id] = map[int]int64{}
+	}
+	for idx := range ch.KeyList() {
+		mkBroken[ch.Id][idx] = now
 	}
 }
 
-// HealthyKeyCount reports how many keys are currently unbroken.
+// HealthyKeyCount reports how many keys are currently unbroken (cooled-down
+// keys count as healthy again; clamped to the key-list size).
 func (ch *Channel) HealthyKeyCount() int {
+	n := len(ch.KeyList())
 	mkMu.Lock()
 	defer mkMu.Unlock()
-	return len(ch.KeyList()) - len(mkBroken[ch.Id])
+	broken := mkBroken[ch.Id]
+	if len(broken) == 0 {
+		return n
+	}
+	now := time.Now().Unix()
+	cooldown := int64(keyBreakCooldown.Seconds())
+	healthy := n
+	for idx := range broken {
+		if idx < n {
+			if now-broken[idx] >= cooldown {
+				continue // healed
+			}
+			healthy--
+		}
+	}
+	if healthy < 0 {
+		healthy = 0
+	}
+	return healthy
 }
 
 func GetAllChannels() ([]Channel, error) {

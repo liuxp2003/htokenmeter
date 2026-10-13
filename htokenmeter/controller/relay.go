@@ -455,7 +455,9 @@ func recordSuccess(c *gin.Context, ch *db.Channel, task *relayTask, usage *dto.U
 	userId := c.GetInt(middleware.CtxUserId)
 	tokenId := c.GetInt(middleware.CtxTokenId)
 	tokenName := c.GetString(middleware.CtxTokenName)
+	db.AsyncWG.Add(1)
 	go func() {
+		defer db.AsyncWG.Done()
 		db.RecordConsume(&db.Log{
 			UserId: userId, TokenId: tokenId, TokenName: tokenName,
 			ChannelId: ch.Id, ChannelName: ch.Name, ModelName: task.ClientModel,

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sync"
 	"time"
 
 	"github.com/lxp/htokenmeter/common"
@@ -8,6 +9,10 @@ import (
 
 // Log records one relay consumption with full cost attribution.
 // Cost is stored in micro-USD (int64) to keep decimal discipline; 1 USD = 1e6.
+
+// AsyncWG tracks fire-and-forget accounting goroutines so tests can wait
+// for them before swapping the global DB handle.
+var AsyncWG sync.WaitGroup
 type Log struct {
 	Id               int    `json:"id"`
 	UserId           int    `json:"user_id"`

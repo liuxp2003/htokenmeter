@@ -139,9 +139,11 @@ func StartChannelTester() {
 				}
 				_, rerr := probeChannel(context.Background(), &ch, models[0])
 				if rerr != nil && rerr.StatusCode == http.StatusUnauthorized {
-					if err := ch.UpdateStatus(db.ChannelStatusAuto); err == nil {
-						common.Info("channel %s auto-disabled after test: %s", ch.Name, rerr.Message)
-					}
+					// Periodic tests only cool the keys down (they heal via
+					// half-open probes); real traffic failures decide channel
+					// disabling (F028).
+					ch.MarkAllKeysBroken()
+					common.Info("channel %s: all keys cooling down after test: %s", ch.Name, rerr.Message)
 				}
 			}
 			common.Info("periodic channel test finished")

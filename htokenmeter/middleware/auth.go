@@ -108,6 +108,15 @@ func TokenAuth() gin.HandlerFunc {
 				c.Set(CtxRequestModel, m)
 			}
 		}
+		// Reserve an estimated budget slice for the in-flight request and
+		// hand it back when the handler returns; concurrent requests on one
+		// token can no longer all pass against the same usage snapshot (F016).
+		estMicro := db.EstimateRequestMicro(c.GetString(CtxRequestModel), common.PeekBody(c))
+		if err := token.ReserveQuota(estMicro); err != nil {
+			abortOpenAI(c, http.StatusForbidden, err.Error())
+			return
+		}
+		defer token.ReleaseQuota(estMicro)
 		c.Next()
 	}
 }

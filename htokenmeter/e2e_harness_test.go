@@ -119,6 +119,7 @@ type harness struct {
 func setup(t *testing.T) *harness {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	model.AsyncWG.Wait() // let prior tests' async accounting settle
 	dir := t.TempDir()
 	common.ConfigDir = dir
 	common.DBPath = dir + "/test.db"

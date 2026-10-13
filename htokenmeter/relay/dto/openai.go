@@ -60,6 +60,61 @@ type ChatRequest struct {
 	Extra            map[string]any  `json:"-"`
 }
 
+// chatRequestKnown lists the fields the struct itself types; anything else
+// in the incoming JSON lands in Extra so re-marshalled conversions keep
+// n/penalties/seed/... instead of silently dropping them (F025).
+var chatRequestKnown = map[string]bool{
+	"model": true, "messages": true, "stream": true, "stream_options": true,
+	"max_tokens": true, "max_completion_tokens": true, "temperature": true,
+	"top_p": true, "stop": true, "tools": true, "tool_choice": true,
+	"response_format": true, "user": true, "reasoning_effort": true,
+}
+
+func (r *ChatRequest) UnmarshalJSON(data []byte) error {
+	type alias ChatRequest
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*r = ChatRequest(a)
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	for k, v := range m {
+		if chatRequestKnown[k] {
+			continue
+		}
+		var val any
+		if json.Unmarshal(v, &val) == nil {
+			if r.Extra == nil {
+				r.Extra = map[string]any{}
+			}
+			r.Extra[k] = val
+		}
+	}
+	return nil
+}
+
+func (r ChatRequest) MarshalJSON() ([]byte, error) {
+	type alias ChatRequest
+	b, err := json.Marshal(alias(r))
+	if err != nil || len(r.Extra) == 0 {
+		return b, err
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		return b, nil
+	}
+	for k, v := range r.Extra {
+		vb, err := json.Marshal(v)
+		if err == nil {
+			m[k] = vb
+		}
+	}
+	return json.Marshal(m)
+}
+
 type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage,omitempty"`
 }

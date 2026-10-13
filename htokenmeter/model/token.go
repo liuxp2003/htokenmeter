@@ -2,11 +2,13 @@ package model
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/lxp/htokenmeter/common"
+	"github.com/lxp/htokenmeter/relay/dto"
 )
 
 const (
@@ -79,6 +81,63 @@ func (t *Token) Validate() error {
 		return errors.New("token budget exhausted")
 	}
 	return nil
+}
+
+// In-flight budget reservation (F016): consumption is booked to the DB only
+// after a response, so N concurrent requests all validated against the same
+// snapshot could jointly overspend a shared key. Reserving an upfront
+// estimate per request closes that window to estimation error.
+var (
+	resMu  sync.Mutex
+	resMap = map[int]int64{} // token id -> reserved micro-USD
+)
+
+// ReserveQuota atomically checks the budget including in-flight estimates
+// and reserves estMicro for this request.
+func (t *Token) ReserveQuota(estMicro int64) error {
+	if t.QuotaUsd < 0 {
+		return nil // unlimited: nothing to reserve against
+	}
+	resMu.Lock()
+	defer resMu.Unlock()
+	reserved := resMap[t.Id]
+	if t.UsedUsd+float64(reserved+estMicro)/1e6 >= t.QuotaUsd {
+		return errors.New("token budget exhausted")
+	}
+	resMap[t.Id] = reserved + estMicro
+	return nil
+}
+
+// ReleaseQuota gives a reservation back once the request settles.
+func (t *Token) ReleaseQuota(estMicro int64) {
+	if t.QuotaUsd < 0 {
+		return
+	}
+	resMu.Lock()
+	defer resMu.Unlock()
+	resMap[t.Id] -= estMicro
+	if resMap[t.Id] <= 0 {
+		delete(resMap, t.Id)
+	}
+}
+
+// EstimateRequestMicro prices a rough upper bound for the request body so
+// the budget reservation has something to hold (F016). No price row or no
+// model means no reservation — the plain snapshot check still applies.
+func EstimateRequestMicro(model string, body []byte) int64 {
+	if model == "" {
+		return 0
+	}
+	p, ok := GetPrice(model)
+	if !ok {
+		return 0
+	}
+	tok := dto.EstimateTokens(string(body))
+	if tok <= 0 {
+		return 0
+	}
+	// Prompt+completion allowance: price as if completion ≈ prompt.
+	return p.CostMicroUsd(tok, tok, 0, 0, 0, true)
 }
 
 // AllowsModel checks the token model whitelist (empty = all).
