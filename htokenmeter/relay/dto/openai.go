@@ -31,6 +31,9 @@ type ToolCall struct {
 	Id       string       `json:"id"`
 	Type     string       `json:"type"`
 	Function FunctionCall `json:"function"`
+	// Index routes streaming deltas of parallel tool calls (upstream
+	// tool_calls[].index); zero for non-streaming requests.
+	Index int `json:"index,omitempty"`
 }
 
 type FunctionCall struct {

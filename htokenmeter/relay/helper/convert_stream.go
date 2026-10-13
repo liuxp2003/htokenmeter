@@ -75,7 +75,11 @@ func streamOpenAIToClaude(sc interface {
 	var usage *dto.Usage
 	started := false
 	textStarted := false
-	toolIdx := -1
+	// Upstream tool_calls[].index -> Claude content_block index. Parallel
+	// tool calls each get their own block; text stays block 0 (F014).
+	toolBlocks := map[int]int{}
+	lastToolBlock := -1
+	nextBlock := 0
 	finish := ""
 
 	startMsg := func() {
@@ -136,16 +140,31 @@ func streamOpenAIToClaude(sc interface {
 			}
 			for _, tc := range ch.Delta.ToolCalls {
 				startMsg()
-				if toolIdx < 0 {
-					toolIdx = 1
-					emit(mustMarshal(map[string]any{
-						"type": "content_block_start", "index": toolIdx,
-						"content_block": map[string]any{"type": "tool_use", "id": tc.Id, "name": tc.Function.Name, "input": map[string]any{}},
-					}))
+				blk, ok := toolBlocks[tc.Index]
+				if !ok {
+					if tc.Id == "" && lastToolBlock >= 0 {
+						// Continuation delta without an announcement and the
+						// index was never seen: single-tool stream where the
+						// provider omits index — route to the open block.
+						blk = lastToolBlock
+					} else {
+						nextBlock++
+						blk = nextBlock
+						toolBlocks[tc.Index] = blk
+						name := tc.Function.Name
+						if name == "" {
+							name = "tool"
+						}
+						emit(mustMarshal(map[string]any{
+							"type": "content_block_start", "index": blk,
+							"content_block": map[string]any{"type": "tool_use", "id": tc.Id, "name": name, "input": map[string]any{}},
+						}))
+					}
 				}
+				lastToolBlock = blk
 				if tc.Function.Arguments != "" {
 					emit(mustMarshal(map[string]any{
-						"type": "content_block_delta", "index": toolIdx,
+						"type": "content_block_delta", "index": blk,
 						"delta": map[string]any{"type": "input_json_delta", "partial_json": tc.Function.Arguments},
 					}))
 				}
@@ -155,8 +174,8 @@ func streamOpenAIToClaude(sc interface {
 	if textStarted {
 		emit(json.RawMessage(`{"type":"content_block_stop","index":0}`))
 	}
-	if toolIdx >= 0 {
-		emit(mustMarshal(map[string]any{"type": "content_block_stop", "index": toolIdx}))
+	for i := 1; i <= nextBlock; i++ {
+		emit(mustMarshal(map[string]any{"type": "content_block_stop", "index": i}))
 	}
 	stop := openAIStopToClaude(finish)
 	finalUsage := claudeUsageFrom(usage)
