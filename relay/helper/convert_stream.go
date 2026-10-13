@@ -16,10 +16,9 @@ func convertStream(w http.ResponseWriter, resp *http.Response, rc *RelayContext)
 	if (rc.UpstreamFormat == FormatClaude && rc.ClientFormat == FormatGemini) ||
 		(rc.UpstreamFormat == FormatGemini && rc.ClientFormat == FormatClaude) {
 		resp.Body.Close()
-		rerr := Errorf(http.StatusBadRequest,
+		// Return without writing: controller.Relay is the single error writer.
+		return nil, Errorf(http.StatusBadRequest,
 			"cross-format streaming between claude and gemini is not supported; disable stream or use a matching channel")
-		WriteError(w, rc.ClientFormat, rerr)
-		return nil, rerr
 	}
 	setSSEHeaders(w)
 	w.WriteHeader(http.StatusOK)
@@ -52,15 +51,14 @@ func convertStream(w http.ResponseWriter, resp *http.Response, rc *RelayContext)
 		usage = streamGeminiToOpenAI(sc, emit, rc)
 	default:
 		// Fallback: forward lines and hope for the best.
+		var collected []*dto.Usage
 		for sc.Scan() {
 			if u := scanLineUsage(rc.UpstreamFormat, sc.Bytes()); u != nil {
-				usage = u
+				collected = append(collected, u)
 			}
 			emitRaw(sc.Bytes())
 		}
-	}
-	if usage == nil {
-		usage = &dto.Usage{}
+		usage = mergeStreamUsage(collected)
 	}
 	return usage, nil
 }
@@ -85,7 +83,9 @@ func streamOpenAIToClaude(sc interface {
 			return
 		}
 		started = true
-		emit(json.RawMessage(`{"type":"message_start","message":{"id":"msg_` + strconv.FormatInt(nowUnix(), 10) + `","type":"message","role":"assistant","model":"` + jsonEscape(rc.ClientModel) + `","content":[],"usage":{"input_tokens":0,"output_tokens":0}}}`))
+		// jsonEscape returns the value WITH its quotes; the template must
+		// not add a second pair around it.
+		emit(json.RawMessage(`{"type":"message_start","message":{"id":"msg_` + strconv.FormatInt(nowUnix(), 10) + `","type":"message","role":"assistant","model":` + jsonEscape(rc.ClientModel) + `,"content":[],"usage":{"input_tokens":0,"output_tokens":0}}}`))
 	}
 	ensureTextBlock := func() {
 		startMsg()

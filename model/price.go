@@ -32,10 +32,14 @@ func DeletePrice(model string) error {
 }
 
 // CostMicroUsd computes cost from usage with prices in USD/1M tokens.
-// cacheRead is a discounted subset of promptTokens, so full-rate input =
-// prompt - cacheRead (mirrors helper.CostMicroUsd).
-func (p ModelPrice) CostMicroUsd(promptTokens, completionTokens, cacheRead int64, images int) int64 {
-	fullRateInput := promptTokens - cacheRead
+// cacheRead is a discounted subset of promptTokens when promptIncludesCache
+// is true (OpenAI/Gemini semantics); Claude reports cached tokens disjoint
+// from input_tokens, so there the full-rate input is all of promptTokens.
+func (p ModelPrice) CostMicroUsd(promptTokens, completionTokens, cacheRead int64, images int, promptIncludesCache bool) int64 {
+	fullRateInput := promptTokens
+	if promptIncludesCache {
+		fullRateInput -= cacheRead
+	}
 	if fullRateInput < 0 {
 		fullRateInput = 0
 	}

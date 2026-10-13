@@ -65,6 +65,24 @@ func Relay(c *gin.Context, clientFormat helper.Format) {
 
 // pickChannel selects a channel honoring the admin pin and retry tier.
 func pickChannel(c *gin.Context, task *relayTask, retry int) (*db.Channel, *helper.RelayError) {
+	// Re-check the token model whitelist against the parsed model: the
+	// middleware check runs on a byte-scan probe that takes the FIRST
+	// "model" key, while encoding/json routes by the LAST — a duplicate
+	// key body must not smuggle an unlisted model past the whitelist.
+	if task.ClientModel != "" {
+		if ml := c.GetString(middleware.CtxTokenModels); ml != "" {
+			allowed := false
+			for _, m := range splitCSV(ml) {
+				if m == task.ClientModel {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return nil, helper.Errorf(http.StatusForbidden, "token does not allow model: %s", task.ClientModel)
+			}
+		}
+	}
 	if id := c.GetInt(middleware.CtxChannelId); id > 0 && retry == 0 {
 		ch, err := db.GetChannelById(id)
 		if err != nil {
@@ -195,9 +213,9 @@ func executeOnce(c *gin.Context, ch *db.Channel, task *relayTask) (*dto.Usage, *
 // streamChatURL returns the stream URL for adaptors that split it.
 func streamChatURL(ad adaptor.Adaptor, meta *adaptor.Meta) string {
 	if s, ok := ad.(interface {
-		ChatURLStream(m *adaptor.Meta) string
+		ChatURLStream(m *adaptor.Meta, model string) string
 	}); ok {
-		return s.ChatURLStream(meta)
+		return s.ChatURLStream(meta, meta.UpstreamModel)
 	}
 	return ad.ChatURL(meta)
 }
@@ -355,7 +373,7 @@ func recordSuccess(c *gin.Context, ch *db.Channel, task *relayTask, usage *dto.U
 	}
 	cost := int64(0)
 	if p, ok := db.GetPrice(task.ClientModel); ok {
-		cost = p.CostMicroUsd(usage.PromptTokens, usage.CompletionTokens, usage.CacheReadTokens, usage.Images)
+		cost = p.CostMicroUsd(usage.PromptTokens, usage.CompletionTokens, usage.CacheReadTokens, usage.Images, usage.PromptIncludesCache)
 	}
 	userId := c.GetInt(middleware.CtxUserId)
 	tokenId := c.GetInt(middleware.CtxTokenId)

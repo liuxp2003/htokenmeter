@@ -62,6 +62,11 @@ type Usage struct {
 	CacheReadTokens  int64 `json:"cache_read_tokens"`
 	CacheWriteTokens int64 `json:"cache_write_tokens"`
 	Images           int   `json:"images"`
+	// PromptIncludesCache reports whether PromptTokens already counts the
+	// cache-read tokens (OpenAI/Gemini/Responses semantics). Claude reports
+	// cached tokens as disjoint fields, so its extractors leave this false
+	// and the full-rate input is the whole PromptTokens.
+	PromptIncludesCache bool `json:"-"`
 }
 
 // EstimateTokens gives a rough token count for pre-flight estimates:

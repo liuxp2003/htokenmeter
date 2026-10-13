@@ -81,12 +81,12 @@ func RelayPassthrough(w http.ResponseWriter, resp *http.Response, rc *RelayConte
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
 	sc := newSSEScanner(resp.Body)
-	var usage *dto.Usage
+	var collected []*dto.Usage
 	var buf bytes.Buffer
 	for sc.Scan() {
 		line := sc.Bytes()
 		if u := scanLineUsage(rc.UpstreamFormat, line); u != nil {
-			usage = u
+			collected = append(collected, u)
 		}
 		buf.Reset()
 		buf.Write(line)
@@ -99,10 +99,11 @@ func RelayPassthrough(w http.ResponseWriter, resp *http.Response, rc *RelayConte
 		}
 	}
 	resp.Body.Close()
-	if usage == nil {
-		usage = &dto.Usage{}
-	}
-	return usage, nil
+	// Merge per-field: Claude splits usage across message_start (input
+	// side) and message_delta (output side); last-write-wins lost the
+	// input tokens. mergeStreamUsage returns a zero Usage when nothing
+	// was captured, matching the previous behavior.
+	return mergeStreamUsage(collected), nil
 }
 
 // scanLineUsage inspects one SSE line for usage-bearing events.
@@ -192,6 +193,9 @@ func mergeStreamUsage(usages []*dto.Usage) *dto.Usage {
 		if u.Images > 0 {
 			out.Images = u.Images
 		}
+		if u.PromptIncludesCache {
+			out.PromptIncludesCache = true
+		}
 	}
 	return out
 }
@@ -201,6 +205,8 @@ func geminiUsageToUsage(g *dto.GeminiUsage) *dto.Usage {
 		PromptTokens:     g.PromptTokenCount,
 		CompletionTokens: g.CandidatesTokenCount,
 		CacheReadTokens:  g.CachedContentTokenCount,
+		// Gemini promptTokenCount counts cached tokens as a subset.
+		PromptIncludesCache: true,
 	}
 }
 

@@ -46,7 +46,15 @@ func setRelayRouter(r *gin.Engine) {
 		v1.POST("/moderations", func(c *gin.Context) { controller.Relay(c, helper.FormatOpenAI) })
 		v1.POST("/messages", func(c *gin.Context) { controller.Relay(c, helper.FormatClaude) })
 		v1.POST("/responses", func(c *gin.Context) { controller.Relay(c, helper.FormatResponses) })
-		v1.GET("/responses/:id", func(c *gin.Context) { controller.Relay(c, helper.FormatResponses) })
+	}
+
+	// GET /v1/responses/:id carries no request body, so Distribute's
+	// model requirement cannot apply; TokenAuth alone guards retrieval
+	// and pickChannel falls back to any openai-compatible channel.
+	v1Get := r.Group("/v1")
+	v1Get.Use(middleware.TokenAuth())
+	{
+		v1Get.GET("/responses/:id", func(c *gin.Context) { controller.Relay(c, helper.FormatResponses) })
 	}
 
 	v1beta := r.Group("/v1beta")

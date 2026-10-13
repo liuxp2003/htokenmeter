@@ -72,6 +72,8 @@ func (u openaiUsage) toUsage() *dto.Usage {
 	if u.PromptTokensDetails != nil {
 		out.CacheReadTokens = u.PromptTokensDetails.CachedTokens
 	}
+	// OpenAI prompt_tokens counts cached tokens as a subset.
+	out.PromptIncludesCache = true
 	return out
 }
 
@@ -111,6 +113,8 @@ func (u *responsesUsage) toUsage() *dto.Usage {
 	if u.OutputTokensDetails != nil {
 		out.CompletionTokens += u.OutputTokensDetails.ReasoningTokens
 	}
+	// Responses input_tokens counts cached tokens as a subset.
+	out.PromptIncludesCache = true
 	return out
 }
 

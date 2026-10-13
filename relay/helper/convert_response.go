@@ -106,9 +106,9 @@ func readAll(resp *http.Response) []byte {
 // handleConvertUpstreamError re-renders the upstream error in the client shape.
 func handleConvertUpstreamError(w http.ResponseWriter, resp *http.Response, rc *RelayContext) (*dto.Usage, *RelayError) {
 	body := readAll(resp)
-	rerr := upstreamErrorFromBody(rc.UpstreamFormat, resp.StatusCode, body)
-	WriteError(w, rc.ClientFormat, rerr)
-	return nil, rerr
+	// Return without writing: controller.Relay is the single error writer
+	// (it may still retry this status on another channel).
+	return nil, upstreamErrorFromBody(rc.UpstreamFormat, resp.StatusCode, body)
 }
 
 // ---------- body converters ----------
